@@ -41,13 +41,25 @@
 
 import sys
 import csv
+import json
 import socket
 import sqlite3
 import logging
 from optparse import OptionParser
 from urlparse import urlparse
+# from urllib.parse import urlparse
 #pip install requests
 import requests
+from dbconnect.ssms_connector import SSMSConnector
+from dbconnect.bigquery_connector import BigQueryConnector
+
+def generate_urls_file():
+    query = 'SELECT DISTINCT URL FROM Sandbox.Domain_Reporting'
+    bq = BigQueryConnector('Sandbox')
+    df = bq.to_df(query)
+    df.to_csv('domain_reporting.txt',header=None,index=None)
+
+
 
 #################################################################
 # FUNCTION process_row_to_db.
@@ -56,7 +68,7 @@ import requests
 #################################################################
 
 def process_row_to_db(conn, data_row, comment, hostname):
-    insert_stmt = "INSERT OR IGNORE INTO adstxt (SITE_DOMAIN, EXCHANGE_DOMAIN, SELLER_ACCOUNT_ID, ACCOUNT_TYPE, TAG_ID, ENTRY_COMMENT) VALUES (?, ?, ?, ?, ?, ? );"
+    insert_stmt = "INSERT INTO reference.adstxt (SITE_DOMAIN, EXCHANGE_DOMAIN, SELLER_ACCOUNT_ID, ACCOUNT_TYPE, TAG_ID, ENTRY_COMMENT) VALUES (?, ?, ?, ?, ?, ? );"
     exchange_host     = ''
     seller_account_id = ''
     account_type      = ''
@@ -95,10 +107,12 @@ def process_row_to_db(conn, data_row, comment, hostname):
 
         # Insert a row of data using bind variables (protect against sql injection)
         c = conn.cursor()
-        c.execute(insert_stmt, (hostname, exchange_host, seller_account_id, account_type, tag_id, comment))
-
+        try:
+            c.execute(insert_stmt, (hostname, exchange_host, seller_account_id, account_type, tag_id, comment))
+            conn.commit()
+        except:
+            conn.rollback()
         # Save (commit) the changes
-        conn.commit()
         return 1
 
     return 0
@@ -121,6 +135,7 @@ def crawl_to_db(conn, crawl_url_queue):
         }
 
     for aurl in crawl_url_queue:
+        print(aurl)
         ahost = crawl_url_queue[aurl]
         logging.info(" Crawling  %s : %s " % (aurl, ahost))
         r = requests.get(aurl, headers=myheaders)
@@ -134,13 +149,16 @@ def crawl_to_db(conn, crawl_url_queue):
             logging.debug("-------------")
 
             tmpfile = 'tmpads.txt'
-            with open(tmpfile, 'wb') as tmp_csv_file:
-                tmp_csv_file.write(r.text)
-                tmp_csv_file.close()
+            try:
+                with open(tmpfile, 'wb') as tmp_csv_file:
+                    tmp_csv_file.write(r.text)
+                    tmp_csv_file.close()
+            except:
+                pass
 
             with open(tmpfile, 'rb') as tmp_csv_file:
                 #read the line, split on first comment and keep what is to the left (if any found)
-                line_reader = csv.reader(tmp_csv_file, delimiter='#', quotechar='|')
+                line_reader = csv.reader(tmp_csv_file.read().splitlines(), delimiter='#', quotechar='|')
                 comment = ''
 
                 for line in line_reader:
@@ -157,7 +175,7 @@ def crawl_to_db(conn, crawl_url_queue):
                     elif data_line.find("\t") != -1:
                         data_delimiter = '\t'
                     else:
-                        data_delimiter = ' '
+                            data_delimiter = ' '
 
                     data_reader = csv.reader([data_line], delimiter=',', quotechar='|')
                     for row in data_reader:
@@ -182,11 +200,9 @@ def crawl_to_db(conn, crawl_url_queue):
 
 def load_url_queue(csvfilename, url_queue):
     cnt = 0
-
     with open(csvfilename, 'rb') as csvfile:
         targets_reader = csv.reader(csvfile, delimiter=',', quotechar='|')
         for row in targets_reader:
-
             if len(row) < 1 or row[0].startswith( '#' ):
                 continue
 
@@ -218,6 +234,7 @@ def load_url_queue(csvfilename, url_queue):
 
             if(skip < 1):
                 ads_txt_url = 'http://{thehost}/ads.txt'.format(thehost=host)
+                print(ads_txt_url)
                 logging.info("  pushing %s" % ads_txt_url)
                 url_queue[ads_txt_url] = host
                 cnt = cnt + 1
@@ -231,8 +248,8 @@ def load_url_queue(csvfilename, url_queue):
 arg_parser = OptionParser()
 arg_parser.add_option("-t", "--targets", dest="target_filename",
                   help="list of domains to crawl ads.txt from", metavar="FILE")
-arg_parser.add_option("-d", "--database", dest="target_database",
-                  help="Database to dump crawled data into", metavar="FILE")
+# arg_parser.add_option("-d", "--database", dest="target_database",
+#                   help="Database to dump crawled data into", metavar="FILE")
 arg_parser.add_option("-v", "--verbose", dest="verbose", action='count',
                   help="Increase verbosity (specify multiple times for more)")
 
@@ -249,24 +266,30 @@ elif options.verbose >= 2:
     log_level = logging.DEBUG
 logging.basicConfig(filename='adstxt_crawler.log',level=log_level,format='%(asctime)s %(filename)s:%(lineno)d:%(levelname)s  %(message)s')
 
-crawl_url_queue = {}
-conn = None
-cnt_urls = 0
-cnt_records = 0
+# crawl_url_queue = {}
+# conn = None
+# cnt_urls = 0
+# cnt_records = 0
+#
+# cnt_urls = load_url_queue(options.target_filename, crawl_url_queue)
+# print(options,)
+# if (cnt_urls > 0) and options.target_database and (len(options.target_database) > 1):
+#     conn = sqlite3.connect(options.target_database)
+# if (cnt_urls > 0) and options.target_database and (len(options.target_database) > 1):
 
-cnt_urls = load_url_queue(options.target_filename, crawl_url_queue)
+cnt_urls = 84370
+with open('json_dump.json','r') as f:
+    crawl_url_queue = json.load(f)
 
-if (cnt_urls > 0) and options.target_database and (len(options.target_database) > 1):
-    conn = sqlite3.connect(options.target_database)
-
+conn = SSMSConnector('102').conn
 with conn:
     cnt_records = crawl_to_db(conn, crawl_url_queue)
+    print(cnt_records)
     if(cnt_records > 0):
         conn.commit()
-    #conn.close()
+    conn.close()
 
-print "Wrote %d records from %d URLs to %s" % (cnt_records, cnt_urls, options.target_database)
+print ("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
 
-logging.warning("Wrote %d records from %d URLs to %s" % (cnt_records, cnt_urls, options.target_database))
+logging.warning("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
 logging.warning("Finished.")
-
