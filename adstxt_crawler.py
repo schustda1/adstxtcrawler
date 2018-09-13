@@ -47,6 +47,7 @@ import sqlite3
 import logging
 from optparse import OptionParser
 from urlparse import urlparse
+import string
 # from urllib.parse import urlparse
 #pip install requests
 import requests
@@ -58,8 +59,6 @@ def generate_urls_file():
     bq = BigQueryConnector('Sandbox')
     df = bq.to_df(query)
     df.to_csv('domain_reporting.txt',header=None,index=None)
-
-
 
 #################################################################
 # FUNCTION process_row_to_db.
@@ -133,16 +132,15 @@ def crawl_to_db(conn, crawl_url_queue):
             'User-Agent': 'AdsTxtCrawler/1.0; +https://github.com/InteractiveAdvertisingBureau/adstxtcrawler',
             'Accept': 'text/plain',
         }
-
+    printable = set(string.printable)
     for num,aurl in enumerate(crawl_url_queue):
         try:
             print(num,aurl)
-            print(rowcnt)
             ahost = crawl_url_queue[aurl]
             logging.info(" Crawling  %s : %s " % (aurl, ahost))
+            # return requests.get(aurl, headers=myheaders,timeout=10)
             r = requests.get(aurl, headers=myheaders,timeout=10)
             logging.info("  %d" % r.status_code)
-            print(1)
             if(r.status_code == 200):
                 logging.debug("-------------")
                 logging.debug(r.request.headers)
@@ -152,29 +150,24 @@ def crawl_to_db(conn, crawl_url_queue):
 
                 tmpfile = 'tmpads.txt'
                 try:
-                    print(2)
                     with open(tmpfile, 'wb') as tmp_csv_file:
-                        tmp_csv_file.write(r.text)
+                        corrected_text = filter(lambda x: x in printable, r.text)
+                        tmp_csv_file.write(corrected_text)
                         tmp_csv_file.close()
                 except:
-                    print(3)
                     pass
 
                 with open(tmpfile, 'rb') as tmp_csv_file:
-                    print(4)
                     #read the line, split on first comment and keep what is to the left (if any found)
                     line_reader = csv.reader(tmp_csv_file.read().splitlines(), delimiter='#', quotechar='|')
                     comment = ''
 
                     for line in line_reader:
-                        print(5)
                         logging.debug("DATA:  %s" % line)
 
                         try:
-                            print(6)
                             data_line = line[0]
                         except:
-                            print(7)
                             data_line = "";
 
                         #determine delimiter, conservative = do it per row
@@ -183,23 +176,19 @@ def crawl_to_db(conn, crawl_url_queue):
                         elif data_line.find("\t") != -1:
                             data_delimiter = '\t'
                         else:
-                                data_delimiter = ' '
+                            data_delimiter = ' '
 
                         data_reader = csv.reader([data_line], delimiter=',', quotechar='|')
                         for row in data_reader:
-
                             if len(row) > 0 and row[0].startswith( '#' ):
                                 continue
-
-                            if (len(line) > 1) and (len(line[1]) > 0):
-                                 comment = line[1]
-                            print('rowcnt ' + rowcnt)
+                            elif (len(line) > 1) and (len(line[1]) > 0):
+                                comment = line[1]
                             rowcnt = rowcnt + process_row_to_db(conn, row, comment, ahost)
-        except:
+        except Exception as e:
+            print (e)
             print('failed')
             pass
-
-
     return rowcnt
 
 # end crawl_to_db  #####
@@ -255,52 +244,51 @@ def load_url_queue(csvfilename, url_queue):
 # end load_url_queue  #####
 
 #### MAIN ####
+if __name__ == '__main__':
 
-arg_parser = OptionParser()
-arg_parser.add_option("-t", "--targets", dest="target_filename",
-                  help="list of domains to crawl ads.txt from", metavar="FILE")
-# arg_parser.add_option("-d", "--database", dest="target_database",
-#                   help="Database to dump crawled data into", metavar="FILE")
-arg_parser.add_option("-v", "--verbose", dest="verbose", action='count',
-                  help="Increase verbosity (specify multiple times for more)")
+    arg_parser = OptionParser()
+    arg_parser.add_option("-t", "--targets", dest="target_filename",
+                      help="list of domains to crawl ads.txt from", metavar="FILE")
+    # arg_parser.add_option("-d", "--database", dest="target_database",
+    #                   help="Database to dump crawled data into", metavar="FILE")
+    arg_parser.add_option("-v", "--verbose", dest="verbose", action='count',
+                      help="Increase verbosity (specify multiple times for more)")
 
-(options, args) = arg_parser.parse_args()
+    (options, args) = arg_parser.parse_args()
 
-if len(sys.argv)==1:
-    arg_parser.print_help()
-    exit(1)
+    if len(sys.argv)==1:
+        arg_parser.print_help()
+        exit(1)
 
-log_level = logging.WARNING # default
-if options.verbose == 1:
-    log_level = logging.INFO
-elif options.verbose >= 2:
-    log_level = logging.DEBUG
-logging.basicConfig(filename='adstxt_crawler.log',level=log_level,format='%(asctime)s %(filename)s:%(lineno)d:%(levelname)s  %(message)s')
+    log_level = logging.WARNING # default
+    if options.verbose == 1:
+        log_level = logging.INFO
+    elif options.verbose >= 2:
+        log_level = logging.DEBUG
+    logging.basicConfig(filename='adstxt_crawler.log',level=log_level,format='%(asctime)s %(filename)s:%(lineno)d:%(levelname)s  %(message)s')
 
-# crawl_url_queue = {}
-# conn = None
-# cnt_urls = 0
-# cnt_records = 0
-#
-# cnt_urls = load_url_queue(options.target_filename, crawl_url_queue)
-# print(options,)
-# if (cnt_urls > 0) and options.target_database and (len(options.target_database) > 1):
-#     conn = sqlite3.connect(options.target_database)
-# if (cnt_urls > 0) and options.target_database and (len(options.target_database) > 1):
 
-cnt_urls = 84370
-with open('json_dump.json','r') as f:
-    crawl_url_queue = json.load(f)
+    crawl_url_queue = {}
+    conn = None
+    cnt_urls = 0
+    cnt_records = 0
 
-conn = SSMSConnector('102').conn
-with conn:
-    cnt_records = crawl_to_db(conn, crawl_url_queue)
-    print(cnt_records)
-    if(cnt_records > 0):
-        conn.commit()
-    conn.close()
+    generate_urls_file()
+    # cnt_urls = load_url_queue('target_domains2.txt',crawl_url_queue)
+    cnt_urls = load_url_queue('domain_report.txt',crawl_url_queue)
 
-print ("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
+    # filename = 'test_domain.json'
+    # with open(filename,'r') as f:
+    #     crawl_url_queue = json.load(f)
+    conn = SSMSConnector('102').conn
+    with conn:
+        cnt_records = crawl_to_db(conn, crawl_url_queue)
+        print(cnt_records)
+        if(cnt_records > 0):
+            conn.commit()
+        # conn.close()
 
-logging.warning("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
-logging.warning("Finished.")
+    print ("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
+
+    logging.warning("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
+    logging.warning("Finished.")
