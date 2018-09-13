@@ -13,10 +13,10 @@ class ConnectorFunctions(object):
         variable called 'credentials'
         '''
 
-        if 'credentials.json' not in set(os.listdir('/Users/dschuster/Documents/Passwords/')):
-            raise Exception('No credential file found!')
+        # if 'credentials.json' not in set(os.listdir("C:\Global Operations\DS\credentials\")):
+        #     raise Exception('No credential file found!')
 
-        with open('/Users/dschuster/Documents/Passwords/credentials.json') as f:
+        with open("C:\Global Operations\DS\credentials\credentials.json") as f:
             self.credentials = json.loads(f.read())
             f.close()
 
@@ -75,5 +75,5 @@ class ConnectorFunctions(object):
 
 
 # if __name__ == '__main__':
-#     c = ConnectorFunctions()
-#     print (c.credentials['102'])
+    # c = ConnectorFunctions()
+    # print (c.credentials['102'])

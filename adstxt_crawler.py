@@ -134,59 +134,71 @@ def crawl_to_db(conn, crawl_url_queue):
             'Accept': 'text/plain',
         }
 
-    for aurl in crawl_url_queue:
-        print(aurl)
-        ahost = crawl_url_queue[aurl]
-        logging.info(" Crawling  %s : %s " % (aurl, ahost))
-        r = requests.get(aurl, headers=myheaders)
-        logging.info("  %d" % r.status_code)
+    for num,aurl in enumerate(crawl_url_queue):
+        try:
+            print(num,aurl)
+            print(rowcnt)
+            ahost = crawl_url_queue[aurl]
+            logging.info(" Crawling  %s : %s " % (aurl, ahost))
+            r = requests.get(aurl, headers=myheaders,timeout=10)
+            logging.info("  %d" % r.status_code)
+            print(1)
+            if(r.status_code == 200):
+                logging.debug("-------------")
+                logging.debug(r.request.headers)
+                logging.debug("-------------")
+                logging.debug("%s" % r.text)
+                logging.debug("-------------")
 
-        if(r.status_code == 200):
-            logging.debug("-------------")
-            logging.debug(r.request.headers)
-            logging.debug("-------------")
-            logging.debug("%s" % r.text)
-            logging.debug("-------------")
+                tmpfile = 'tmpads.txt'
+                try:
+                    print(2)
+                    with open(tmpfile, 'wb') as tmp_csv_file:
+                        tmp_csv_file.write(r.text)
+                        tmp_csv_file.close()
+                except:
+                    print(3)
+                    pass
 
-            tmpfile = 'tmpads.txt'
-            try:
-                with open(tmpfile, 'wb') as tmp_csv_file:
-                    tmp_csv_file.write(r.text)
-                    tmp_csv_file.close()
-            except:
-                pass
+                with open(tmpfile, 'rb') as tmp_csv_file:
+                    print(4)
+                    #read the line, split on first comment and keep what is to the left (if any found)
+                    line_reader = csv.reader(tmp_csv_file.read().splitlines(), delimiter='#', quotechar='|')
+                    comment = ''
 
-            with open(tmpfile, 'rb') as tmp_csv_file:
-                #read the line, split on first comment and keep what is to the left (if any found)
-                line_reader = csv.reader(tmp_csv_file.read().splitlines(), delimiter='#', quotechar='|')
-                comment = ''
+                    for line in line_reader:
+                        print(5)
+                        logging.debug("DATA:  %s" % line)
 
-                for line in line_reader:
-                    logging.debug("DATA:  %s" % line)
+                        try:
+                            print(6)
+                            data_line = line[0]
+                        except:
+                            print(7)
+                            data_line = "";
 
-                    try:
-                        data_line = line[0]
-                    except:
-                        data_line = "";
+                        #determine delimiter, conservative = do it per row
+                        if data_line.find(",") != -1:
+                            data_delimiter = ','
+                        elif data_line.find("\t") != -1:
+                            data_delimiter = '\t'
+                        else:
+                                data_delimiter = ' '
 
-                    #determine delimiter, conservative = do it per row
-                    if data_line.find(",") != -1:
-                        data_delimiter = ','
-                    elif data_line.find("\t") != -1:
-                        data_delimiter = '\t'
-                    else:
-                            data_delimiter = ' '
+                        data_reader = csv.reader([data_line], delimiter=',', quotechar='|')
+                        for row in data_reader:
 
-                    data_reader = csv.reader([data_line], delimiter=',', quotechar='|')
-                    for row in data_reader:
+                            if len(row) > 0 and row[0].startswith( '#' ):
+                                continue
 
-                        if len(row) > 0 and row[0].startswith( '#' ):
-                            continue
+                            if (len(line) > 1) and (len(line[1]) > 0):
+                                 comment = line[1]
+                            print('rowcnt ' + rowcnt)
+                            rowcnt = rowcnt + process_row_to_db(conn, row, comment, ahost)
+        except:
+            print('failed')
+            pass
 
-                        if (len(line) > 1) and (len(line[1]) > 0):
-                             comment = line[1]
-
-                        rowcnt = rowcnt + process_row_to_db(conn, row, comment, ahost)
 
     return rowcnt
 
@@ -238,7 +250,6 @@ def load_url_queue(csvfilename, url_queue):
                 logging.info("  pushing %s" % ads_txt_url)
                 url_queue[ads_txt_url] = host
                 cnt = cnt + 1
-
     return cnt
 
 # end load_url_queue  #####
