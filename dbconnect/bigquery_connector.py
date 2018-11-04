@@ -23,10 +23,7 @@ class BigQueryConnector(ConnectorFunctions):
         variable called 'credentials'
         '''
 
-        if 'credentials.json' not in set(os.listdir('/Users/dschuster/Documents/Passwords/')):
-            raise Exception('No credential file found!')
-
-        with open('/Users/dschuster/Documents/Passwords/credentials.json') as f:
+        with open("C:\Global Operations\DS\credentials\credentials.json") as f:
             self.credentials = json.loads(f.read())
             f.close()
 

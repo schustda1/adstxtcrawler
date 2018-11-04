@@ -288,7 +288,7 @@ if __name__ == '__main__':
             conn.commit()
         # conn.close()
 
-    print ("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
+    print (f"Wrote {cnt_records} records from {cnt_urls} URLs")
 
-    logging.warning("Wrote %d records from %d URLs" % (cnt_records, cnt_urls))
+    logging.warning(f"Wrote {cnt_records} records from {cnt_urls} URLs")
     logging.warning("Finished.")
