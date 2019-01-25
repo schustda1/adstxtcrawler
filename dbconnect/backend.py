@@ -16,7 +16,7 @@ class ConnectorFunctions(object):
         # if 'credentials.json' not in set(os.listdir("C:\Global Operations\DS\credentials\")):
         #     raise Exception('No credential file found!')
 
-        with open("C:\Global Operations\DS\credentials\credentials.json") as f:
+        with open('/Users/dschuster/Documents/Passwords/credentials.json') as f:
             self.credentials = json.loads(f.read())
             f.close()
 

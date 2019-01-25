@@ -50,13 +50,23 @@ from urlparse import urlparse
 import string
 # from urllib.parse import urlparse
 #pip install requests
+# import pyodbc
+import psycopg2
 import requests
-from dbconnect.ssms_connector import SSMSConnector
-from dbconnect.bigquery_connector import BigQueryConnector
+# from dbconnect.ssms_connector import SSMSConnector
+# from dbconnect.bigquery_connector import BigQueryConnector
 
 def generate_urls_file():
-    query = 'SELECT DISTINCT URL FROM Sandbox.Domain_Reporting'
-    bq = BigQueryConnector('Sandbox')
+    query = '''
+    SELECT DISTINCT URL
+    FROM `Tableau.DomainReport_Table`
+    WHERE URL NOT IN (
+        SELECT domain
+        FROM `Tableau.DomainReport_Adstxt`
+    )
+    AND Environment = 'Web'
+    '''
+    bq = BigQueryConnector('Tableau')
     df = bq.to_df(query)
     df.to_csv('domain_reporting.txt',header=None,index=None)
 
@@ -67,7 +77,7 @@ def generate_urls_file():
 #################################################################
 
 def process_row_to_db(conn, data_row, comment, hostname):
-    insert_stmt = "INSERT INTO reference.adstxt (SITE_DOMAIN, EXCHANGE_DOMAIN, SELLER_ACCOUNT_ID, ACCOUNT_TYPE, TAG_ID, ENTRY_COMMENT) VALUES (?, ?, ?, ?, ?, ? );"
+    insert_stmt = "INSERT INTO reference.adstxt (SITE_DOMAIN, EXCHANGE_DOMAIN, SELLER_ACCOUNT_ID, ACCOUNT_TYPE, TAG_ID, ENTRY_COMMENT) VALUES (%s, %s, %s, %s, %s, %s );"
     exchange_host     = ''
     seller_account_id = ''
     account_type      = ''
@@ -109,7 +119,8 @@ def process_row_to_db(conn, data_row, comment, hostname):
         try:
             c.execute(insert_stmt, (hostname, exchange_host, seller_account_id, account_type, tag_id, comment))
             conn.commit()
-        except:
+        except Exception as e:
+            print(e)
             conn.rollback()
         # Save (commit) the changes
         return 1
@@ -129,15 +140,19 @@ def crawl_to_db(conn, crawl_url_queue):
     rowcnt = 0
 
     myheaders = {
-            'User-Agent': 'AdsTxtCrawler/1.0; +https://github.com/InteractiveAdvertisingBureau/adstxtcrawler',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.90 Safari/537.36',
+    #         'User-Agent': 'AdsTxtCrawler/1.0; +https://github.com/InteractiveAdvertisingBureau/adstxtcrawler',
             'Accept': 'text/plain',
         }
     printable = set(string.printable)
-    for num,aurl in enumerate(crawl_url_queue):
+    urls = list(crawl_url_queue.keys())
+    for num,aurl in enumerate(urls):
         try:
             print(num,aurl)
             ahost = crawl_url_queue[aurl]
+            del crawl_url_queue[aurl]
             logging.info(" Crawling  %s : %s " % (aurl, ahost))
+            # return requests.get(aurl, timeout=10)
             # return requests.get(aurl, headers=myheaders,timeout=10)
             r = requests.get(aurl, headers=myheaders,timeout=10)
             logging.info("  %d" % r.status_code)
@@ -184,7 +199,16 @@ def crawl_to_db(conn, crawl_url_queue):
                                 continue
                             elif (len(line) > 1) and (len(line[1]) > 0):
                                 comment = line[1]
-                            rowcnt = rowcnt + process_row_to_db(conn, row, comment, ahost)
+                            domain_done = process_row_to_db(conn, row, comment, ahost)
+                            if domain_done:
+                                rowcnt += 1
+                                break
+                            # rowcnt = rowcnt + process_row_to_db(conn, row, comment, ahost)
+                            # break
+                        if domain_done:
+                            break
+                    domain_done = 0
+                    # break
         except Exception as e:
             print (e)
             print('failed')
@@ -273,14 +297,22 @@ if __name__ == '__main__':
     cnt_urls = 0
     cnt_records = 0
 
-    generate_urls_file()
-    # cnt_urls = load_url_queue('target_domains2.txt',crawl_url_queue)
-    cnt_urls = load_url_queue('domain_report.txt',crawl_url_queue)
+    # generate_urls_file()
+    # cnt_urls = load_url_queue('test_domains.txt',crawl_url_queue)
+    cnt_urls = load_url_queue('domain_reporting.txt',crawl_url_queue)
 
     # filename = 'test_domain.json'
     # with open(filename,'r') as f:
     #     crawl_url_queue = json.load(f)
-    conn = SSMSConnector('102').conn
+
+    # with open("C:\Global Operations\DS\credentials\credentials.json") as f:
+    # with open('/Users/dschuster/Documents/Passwords/credentials.json') as f:
+        # credentials = json.loads(f.read())
+        # f.close()
+    # conn = pyodbc.connect(credentials['102'])
+    # conn = SSMSConnector('102').conn
+
+    conn = psycopg2.connect(**conn_string)
     with conn:
         cnt_records = crawl_to_db(conn, crawl_url_queue)
         print(cnt_records)
@@ -288,7 +320,7 @@ if __name__ == '__main__':
             conn.commit()
         # conn.close()
 
-    print (f"Wrote {cnt_records} records from {cnt_urls} URLs")
+    # print (f"Wrote {cnt_records} records from {cnt_urls} URLs")
 
-    logging.warning(f"Wrote {cnt_records} records from {cnt_urls} URLs")
+    # logging.warning(f"Wrote {cnt_records} records from {cnt_urls} URLs")
     logging.warning("Finished.")

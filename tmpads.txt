@@ -1,0 +1,9 @@
+#Ads.txt abc.go.com
+
+rubiconproject.com, 207416, DIRECT, 0bfd66d529a55807
+google.com, pub-3430841406405112, DIRECT #News Display
+appnexus.com, 9901, DIRECT
+spotxchange.com, 228164, DIRECT, 7842df1d2fe2db34
+spotx.tv, 228164, DIRECT, 7842df1d2fe2db34
+
+#Last Modified: 10/22/2018 : 5:18 PM PST
