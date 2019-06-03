@@ -13,6 +13,7 @@ import pyodbc
 import requests
 import sqlalchemy
 import pandas as pd
+from time import sleep
 
 def generate_urls_file(filename, conn_string, list_num):
 
@@ -230,6 +231,7 @@ def load_url_queue(csvfilename, url_queue):
 if __name__ == '__main__':
 
     list_num = sys.argv[1]
+    sleep(list_num * 60)
 
     with open('credentials.json') as credential_file:
         conn = json.load(credential_file)
