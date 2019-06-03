@@ -42,9 +42,9 @@ def process_row_to_db(conn, data_row, comment, hostname):
     tag_id            = ''
 
     if len(data_row) >= 3:
-        exchange_host = data_row[0].lower().trim()
-        seller_account_id = data_row[1].lower().trim()
-        account_type = data_row[2].lower().trim()
+        exchange_host = data_row[0].lower().strip()
+        seller_account_id = data_row[1].lower().strip()
+        account_type = data_row[2].lower().strip()
 
     if len(data_row) == 4:
         tag_id            = data_row[3].lower()
