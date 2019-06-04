@@ -245,8 +245,6 @@ if __name__ == '__main__':
     conn.commit()
     conn.close()
 
-    sleep(int(list_num) * 60)
-
     # start script
     crawl_url_queue = {}
     conn = None
