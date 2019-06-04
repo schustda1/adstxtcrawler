@@ -19,7 +19,7 @@ def generate_urls_file(filename, conn_string, list_num):
 
     query = '''
         SELECT domain FROM (
-            SELECT domain, ROW_NUMBER() OVER(ORDER BY domain) % 8 r
+            SELECT domain, ROW_NUMBER() OVER(ORDER BY (SELECT NULL)) % 8 r
             FROM reference.non_adstxt
         ) d
         WHERE r = {0}
