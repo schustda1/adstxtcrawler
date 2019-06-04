@@ -231,7 +231,6 @@ def load_url_queue(csvfilename, url_queue):
 if __name__ == '__main__':
 
     list_num = sys.argv[1]
-    sleep(int(list_num) * 60)
 
     with open('credentials.json') as credential_file:
         conn = json.load(credential_file)
@@ -245,6 +244,8 @@ if __name__ == '__main__':
     cursor.execute("UPDATE reference.adstxt_script SET isRunning = 1 WHERE process = 'adstxt{0}' ".format(list_num))
     conn.commit()
     conn.close()
+
+    sleep(int(list_num) * 60)
 
     # start script
     crawl_url_queue = {}
